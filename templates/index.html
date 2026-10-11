@@ -1,0 +1,585 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - OWASP Sentinel Security Scanner{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+    <!-- Hero / Metrics Overview -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Scans Done -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden group hover:border-slate-700 transition">
+            <div class="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400 group-hover:scale-110 transition">
+                <i data-lucide="scan-line" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Audits Completed</p>
+                <h3 class="text-2xl font-bold text-white tracking-tight mt-0.5">{{ stats.total_scans }}</h3>
+            </div>
+        </div>
+
+        <!-- Total Findings -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden group hover:border-slate-700 transition">
+            <div class="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Vulnerabilities Detected</p>
+                <h3 class="text-2xl font-bold text-white tracking-tight mt-0.5">{{ stats.total_findings }}</h3>
+            </div>
+        </div>
+
+        <!-- Average Score -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden group hover:border-slate-700 transition">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition">
+                <i data-lucide="award" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Average Security Score</p>
+                <h3 class="text-2xl font-bold text-white tracking-tight mt-0.5">{{ stats.average_score }} <span class="text-sm font-normal text-slate-400">/ 100</span></h3>
+            </div>
+        </div>
+
+        <!-- Rules Loaded -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4 relative overflow-hidden group hover:border-slate-700 transition">
+            <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition">
+                <i data-lucide="shield-alert" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detection Rules Active</p>
+                <h3 class="text-2xl font-bold text-white tracking-tight mt-0.5">{{ rules_count }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Telemetry & Analytics Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Severity Distribution Doughnut Chart -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-brand-400"></i>
+                        Severity Distribution
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Finding count by threat severity</p>
+                </div>
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Real-time</span>
+            </div>
+            <div class="relative flex items-center justify-center h-48">
+                <canvas id="severityChart"></canvas>
+            </div>
+            <div class="grid grid-cols-4 gap-2 pt-4 border-t border-slate-800/80 text-center text-xs">
+                <div>
+                    <span class="text-red-400 font-bold block">{{ stats.severity_stats.get('CRITICAL', 0) if stats.severity_stats else 0 }}</span>
+                    <span class="text-slate-500 text-[10px]">Critical</span>
+                </div>
+                <div>
+                    <span class="text-orange-400 font-bold block">{{ stats.severity_stats.get('HIGH', 0) if stats.severity_stats else 0 }}</span>
+                    <span class="text-slate-500 text-[10px]">High</span>
+                </div>
+                <div>
+                    <span class="text-yellow-400 font-bold block">{{ stats.severity_stats.get('MEDIUM', 0) if stats.severity_stats else 0 }}</span>
+                    <span class="text-slate-500 text-[10px]">Medium</span>
+                </div>
+                <div>
+                    <span class="text-blue-400 font-bold block">{{ stats.severity_stats.get('LOW', 0) if stats.severity_stats else 0 }}</span>
+                    <span class="text-slate-500 text-[10px]">Low</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Threat Categories Bar Chart -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-400"></i>
+                        Top Threat Categories
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Most common vulnerability domains</p>
+                </div>
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Top 5</span>
+            </div>
+            <div class="relative h-48">
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                <span>Standard coverage: OWASP 2021 &amp; CWE</span>
+                <a href="{{ url_for('rules_catalog') }}" class="text-brand-400 hover:text-brand-300 font-medium">Explore Rules &rarr;</a>
+            </div>
+        </div>
+
+        <!-- Historical Security Posture Trend Line Chart -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="trending-up" class="w-4 h-4 text-emerald-400"></i>
+                        Security Score Trajectory
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Historical health across recent audits</p>
+                </div>
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Timeline</span>
+            </div>
+            <div class="relative h-48">
+                <canvas id="trendChart"></canvas>
+            </div>
+            <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                <span>Avg: <strong class="text-white">{{ stats.average_score }}</strong> / 100</span>
+                <a href="{{ url_for('history') }}" class="text-brand-400 hover:text-brand-300 font-medium">Full Telemetry &rarr;</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Launcher Section -->
+    <div id="new-scan" class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl relative overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+            <div>
+                <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <i data-lucide="radar" class="w-5 h-5 text-brand-400"></i>
+                    Start Repository Security Scan (Multi-Standard)
+                </h2>
+                <p class="text-sm text-slate-400 mt-1">Audit any codebase across <strong>OWASP Top 10</strong>, <strong>CWE Top 25</strong>, <strong>CIS Cloud &amp; Containers</strong>, <strong>SLSA Supply Chain</strong>, and <strong>FOSS License Governance</strong>.</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-400">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    AST &amp; Regex Engine Ready
+                </span>
+            </div>
+        </div>
+
+        <!-- Scan Mode Tabs -->
+        <div class="flex border-b border-slate-800 mb-6 gap-2 overflow-x-auto" id="scanTabs">
+            <button type="button" data-tab="tab-sample" class="tab-btn px-4 py-3 text-sm font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-2 transition whitespace-nowrap">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                Sample Vulnerable App (1-Click Demo)
+            </button>
+            <button type="button" data-tab="tab-git" class="tab-btn px-4 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                <i data-lucide="git-branch" class="w-4 h-4"></i>
+                Git Repository
+            </button>
+            <button type="button" data-tab="tab-upload" class="tab-btn px-4 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                Upload ZIP Archive
+            </button>
+            <button type="button" data-tab="tab-local" class="tab-btn px-4 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition whitespace-nowrap">
+                <i data-lucide="folder" class="w-4 h-4"></i>
+                Local Directory Path
+            </button>
+        </div>
+
+        <!-- Tab 1: Sample Repo -->
+        <div id="tab-sample" class="tab-content block">
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div class="space-y-2 max-w-2xl">
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                        Instant Testbed
+                    </div>
+                    <h3 class="text-lg font-bold text-white">Pre-packaged Vulnerable Codebase</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        Test Sentinel immediately with our built-in testbed containing realistic flaws across <strong>OWASP Top 10</strong>, <strong>CWE Top 25</strong>, <strong>CIS Docker/K8s/Terraform</strong>, <strong>Supply Chain (SLSA)</strong>, and <strong>FOSS License Governance</strong>:
+                        SQL Injection, Command Injection, Path Traversal, SSRF, Deserialization, Broken Auth, Hardcoded Secrets, CIS Container root execution, Unencrypted EBS, and Viral Copyleft dependencies.
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-2">
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python (Flask)</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Node.js (Express)</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Terraform (HCL)</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Kubernetes (YAML)</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Dockerfile</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">GitHub Actions</span>
+                    </div>
+                </div>
+                <div class="flex-shrink-0">
+                    <form class="scan-form" data-type="sample">
+                        <input type="hidden" name="scan_type" value="sample">
+                        <button type="submit" class="submit-scan-btn px-6 py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r from-brand-600 via-indigo-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 shadow-lg shadow-brand-500/25 flex items-center gap-2 transition active:scale-95">
+                            <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                            <span>Run Demo Scan Now</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Git Repository -->
+        <div id="tab-git" class="tab-content hidden space-y-4">
+            <!-- 1-Click Quick Fill Presets -->
+            <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
+                <span class="font-semibold text-slate-300 flex items-center gap-1">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i> Quick Presets:
+                </span>
+                <button type="button" onclick="fillGitPreset('https://github.com/OWASP/NodeGoat.git', 'master', '')" 
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                    OWASP NodeGoat
+                </button>
+                <button type="button" onclick="fillGitPreset('https://github.com/juice-shop/juice-shop.git', 'master', '')" 
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                    OWASP Juice Shop
+                </button>
+                <button type="button" onclick="fillGitPreset('https://github.com/WebGoat/WebGoat.git', 'develop', '')" 
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                    OWASP WebGoat
+                </button>
+            </div>
+
+            <form class="scan-form space-y-4" data-type="git">
+                <input type="hidden" name="scan_type" value="git">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Repository URL</label>
+                        <div class="relative">
+                            <i data-lucide="git-fork" class="w-5 h-5 text-slate-500 absolute left-3.5 top-3.5"></i>
+                            <input type="url" id="gitRepoUrlInput" name="repo_url" placeholder="https://github.com/owner/repository.git" required
+                                class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Branch / Tag (Optional)</label>
+                        <input type="text" id="gitBranchInput" name="branch" placeholder="main"
+                            class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Subfolder (Optional)</label>
+                        <input type="text" id="gitSubfolderInput" name="subfolder" placeholder="e.g. backend or src/"
+                            class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                        <i data-lucide="folder-tree" class="w-4 h-4 text-cyan-400"></i>
+                        <span><strong>Full Folder Tree:</strong> All nested subfolders and directories are scanned recursively by default.</span>
+                    </div>
+                    <button type="submit" class="submit-scan-btn px-6 py-3 rounded-xl font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/25 flex items-center gap-2 transition active:scale-95 self-end sm:self-auto">
+                        <i data-lucide="download-cloud" class="w-4 h-4"></i>
+                        <span>Clone &amp; Scan Repository</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tab 3: Upload ZIP Archive -->
+        <div id="tab-upload" class="tab-content hidden">
+            <form class="scan-form space-y-4" data-type="upload" enctype="multipart/form-data">
+                <input type="hidden" name="scan_type" value="upload">
+                <div class="border-2 border-dashed border-slate-700 hover:border-brand-500/60 rounded-xl p-8 text-center bg-slate-950/40 transition group cursor-pointer" id="dropzone">
+                    <input type="file" name="archive_file" id="archive_file" accept=".zip" class="hidden" required>
+                    <div class="space-y-3">
+                        <div class="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-brand-400 group-hover:scale-110 transition">
+                            <i data-lucide="file-archive" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-white" id="file_selected_text">Click or drag &amp; drop a project .zip archive here</p>
+                            <p class="text-xs text-slate-400 mt-1">Supports full project directories compressed as ZIP (up to 100MB)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="submit-scan-btn px-6 py-3 rounded-xl font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/25 flex items-center gap-2 transition active:scale-95">
+                        <i data-lucide="upload" class="w-4 h-4"></i>
+                        <span>Upload &amp; Scan Archive</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tab 4: Local Directory -->
+        <div id="tab-local" class="tab-content hidden">
+            <form class="scan-form space-y-4" data-type="local">
+                <input type="hidden" name="scan_type" value="local">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Absolute Local Filesystem Path</label>
+                    <div class="relative">
+                        <i data-lucide="folder-search" class="w-5 h-5 text-slate-500 absolute left-3.5 top-3.5"></i>
+                        <input type="text" name="local_path" placeholder="/home/user/projects/my-app" required
+                            class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition font-mono">
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1.5">Scans an existing directory directly on the local machine without copying.</p>
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="submit-scan-btn px-6 py-3 rounded-xl font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/25 flex items-center gap-2 transition active:scale-95">
+                        <i data-lucide="hard-drive" class="w-4 h-4"></i>
+                        <span>Scan Local Directory</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Active Scanning Modal Overlay: Elevated Terminal Console -->
+    <div id="scan-progress-overlay" class="fixed inset-0 bg-dark-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <!-- Terminal Header -->
+            <div class="bg-dark-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                    <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+                    <span class="text-xs font-mono text-slate-400 ml-2">Sentinel SAST Engine v2.4</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span id="scanTimer">0.0s</span>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2" id="progress-title">
+                        <i data-lucide="radar" class="w-5 h-5 text-brand-400 animate-spin"></i>
+                        Scanning Repository
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1" id="progress-status">Analyzing codebase AST, evaluating OWASP/CWE rules, and computing quality gate...</p>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-slate-950 border border-slate-800 rounded-full h-2.5 overflow-hidden">
+                    <div id="scanProgressBar" class="bg-gradient-to-r from-brand-600 via-indigo-500 to-cyan-500 h-2.5 rounded-full transition-all duration-300 w-12"></div>
+                </div>
+
+                <!-- Animated Step Checklist -->
+                <div class="space-y-2 text-xs font-mono bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 max-h-44 overflow-y-auto" id="scanTerminalLogs">
+                    <div class="flex items-center gap-2 text-emerald-400">
+                        <span>[1/6]</span> <span>Initialized static analysis AST &amp; regex pipelines</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-cyan-300" id="step-tree">
+                        <span>[2/6]</span> <span>Parsing directory tree and loading multi-standard rules</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-500" id="step-owasp">
+                        <span>[3/6]</span> <span>Scanning OWASP Top 10 &amp; CWE Top 25 vulnerabilities...</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-500" id="step-cis">
+                        <span>[4/6]</span> <span>Auditing CIS Container &amp; Infrastructure-as-Code benchmarks...</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-500" id="step-slsa">
+                        <span>[5/6]</span> <span>Verifying SLSA CI/CD pipelines &amp; FOSS license governance...</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-500" id="step-gate">
+                        <span>[6/6]</span> <span>Evaluating Policy Quality Gate &amp; generating 1-Click fixes...</span>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-slate-500 text-center italic">Scanning deeply without sending any code off-premises.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Scans Table -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="history" class="w-5 h-5 text-brand-400"></i>
+                    Recent Audits
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Historical audit logs and security assessments</p>
+            </div>
+            {% if recent_scans %}
+            <a href="{{ url_for('history') }}" class="text-xs text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1 transition px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700">
+                View all history <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </a>
+            {% endif %}
+        </div>
+
+        {% if recent_scans %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-semibold">
+                        <th class="py-3 px-4">Repository</th>
+                        <th class="py-3 px-4">Source</th>
+                        <th class="py-3 px-4">Score &amp; Grade</th>
+                        <th class="py-3 px-4">Vulnerabilities</th>
+                        <th class="py-3 px-4">Files / LOC</th>
+                        <th class="py-3 px-4">Date</th>
+                        <th class="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60">
+                    {% for scan in recent_scans %}
+                    <tr class="hover:bg-slate-850/50 transition group" id="recent-row-{{ scan.id }}">
+                        <td class="py-3.5 px-4 font-medium text-white">
+                            <div class="flex flex-col">
+                                <a href="{{ url_for('scan_detail', scan_id=scan.id) }}" class="hover:text-brand-400 transition flex items-center gap-2 font-semibold">
+                                    <i data-lucide="shield" class="w-4 h-4 text-brand-400"></i>
+                                    <span>{{ scan.repo_name }}</span>
+                                </a>
+                                <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-normal">
+                                    <span class="font-mono text-[11px] text-slate-500">#{{ scan.id[:8] }}</span>
+                                    {% if scan.branch %}
+                                    <span class="text-[11px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 font-mono">{{ scan.branch }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider font-semibold 
+                                {% if scan.source_type == 'sample' %}bg-indigo-500/20 text-indigo-300 border border-indigo-500/30
+                                {% elif scan.source_type == 'git' %}bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
+                                {% elif scan.source_type == 'upload' %}bg-purple-500/20 text-purple-300 border border-purple-500/30
+                                {% else %}bg-slate-700/50 text-slate-300 border border-slate-600{% endif %}">
+                                {{ scan.source_type }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold
+                                    {% if scan.grade in ['A+', 'A'] %}bg-emerald-500/20 text-emerald-400 border border-emerald-500/30
+                                    {% elif scan.grade == 'B' %}bg-cyan-500/20 text-cyan-400 border border-cyan-500/30
+                                    {% elif scan.grade == 'C' %}bg-yellow-500/20 text-yellow-400 border border-yellow-500/30
+                                    {% elif scan.grade == 'D' %}bg-orange-500/20 text-orange-400 border border-orange-500/30
+                                    {% else %}bg-red-500/20 text-red-400 border border-red-500/30{% endif %}">
+                                    {{ scan.grade }}
+                                </span>
+                                <span class="text-xs text-slate-300 font-mono font-semibold">{{ scan.score }}/100</span>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-white">{{ scan.findings_count }}</span>
+                                {% if scan.counts_by_severity %}
+                                <span class="text-xs text-slate-400">
+                                    (Crit: <span class="text-red-400 font-medium">{{ scan.counts_by_severity.get('CRITICAL', 0) }}</span>, 
+                                     High: <span class="text-orange-400 font-medium">{{ scan.counts_by_severity.get('HIGH', 0) }}</span>)
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-400">
+                            {{ scan.scanned_files }} files / {{ scan.lines_of_code }} LOC
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-400 whitespace-nowrap">
+                            {{ scan.created_at[:16].replace('T', ' ') }}
+                        </td>
+                        <td class="py-3.5 px-4 text-right">
+                            <div class="flex items-center justify-end gap-1.5">
+                                <a href="{{ url_for('scan_detail', scan_id=scan.id) }}" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-brand-600 transition" title="View Report">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <button type="button" onclick="rescanFromDashboard('{{ scan.id }}', this)" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-emerald-600 transition" title="Rescan Repository">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                </button>
+                                <a href="{{ url_for('export_json', scan_id=scan.id) }}" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Download JSON">
+                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                </a>
+                                <button type="button" onclick="deleteRecentScan('{{ scan.id }}')" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/20 transition" title="Delete Scan">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12 text-slate-400">
+            <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-3 text-slate-600"></i>
+            <p class="text-base font-semibold text-slate-300">No scans recorded yet</p>
+            <p class="text-xs mt-1">Click the <strong class="text-brand-400">Run Demo Scan Now</strong> button above to launch your first scan!</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- OWASP Top 10 Coverage Grid -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl">
+        <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="layers" class="w-5 h-5 text-brand-400"></i>
+                    Multi-Standard Coverage Matrix
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Comprehensive Static Analysis Coverage across 5 international security frameworks</p>
+            </div>
+            <a href="{{ url_for('rules_catalog') }}" class="text-xs font-semibold text-brand-400 hover:text-brand-300 transition flex items-center gap-1 self-start sm:self-auto">
+                <span>View Full Rules Catalog</span>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </a>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {% for cat_id, meta in owasp_meta.items() %}
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-mono font-bold px-2 py-0.5 rounded {{ meta.badge_color }}">{{ meta.code }}</span>
+                        <i data-lucide="{{ meta.icon }}" class="w-4 h-4 text-slate-400"></i>
+                    </div>
+                    <h4 class="text-sm font-semibold text-white mt-1">{{ meta.name }}</h4>
+                    <p class="text-xs text-slate-400 mt-2 line-clamp-3 leading-relaxed">{{ meta.description }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Injected Stats from Flask context for Chart.js
+    const dashboardStats = {
+        severity: {{ (stats.severity_stats or {}) | tojson }},
+        categories: {{ (stats.category_stats or {}) | tojson }},
+        avgScore: {{ stats.average_score or 100 }}
+    };
+
+    function fillGitPreset(url, branch, subfolder) {
+        const urlInput = document.getElementById('gitRepoUrlInput');
+        const branchInput = document.getElementById('gitBranchInput');
+        const subfolderInput = document.getElementById('gitSubfolderInput');
+        if (urlInput) urlInput.value = url;
+        if (branchInput) branchInput.value = branch;
+        if (subfolderInput) subfolderInput.value = subfolder;
+        if (window.showGlobalToast) window.showGlobalToast(`Loaded Git preset: ${url.split('/').pop().replace('.git', '')}`, 'info');
+    }
+
+    async function rescanFromDashboard(scanId, btn) {
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-emerald-400"></i>';
+        if (window.lucide) lucide.createIcons();
+
+        try {
+            const resp = await fetch(`/api/scan/${scanId}/rescan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await resp.json();
+            if (data.success && data.redirect_url) {
+                if (window.showGlobalToast) window.showGlobalToast('Rescan complete! Redirecting...', 'success');
+                window.location.href = data.redirect_url;
+            } else {
+                alert('Rescan failed: ' + (data.error || 'Unknown error'));
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                if (window.lucide) lucide.createIcons();
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    function deleteRecentScan(scanId) {
+        if (!confirm('Are you sure you want to delete this scan report?')) return;
+        fetch(`/api/scan/${scanId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const row = document.getElementById(`recent-row-${scanId}`);
+                    if (row) row.remove();
+                    else window.location.reload();
+                    if (window.showGlobalToast) window.showGlobalToast('Scan record deleted.', 'success');
+                } else {
+                    alert('Error deleting scan: ' + data.error);
+                }
+            })
+            .catch(err => alert('Network error deleting scan'));
+    }
+</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

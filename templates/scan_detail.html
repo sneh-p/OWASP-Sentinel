@@ -1,0 +1,1229 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Report: {{ scan.repo_name }} - OWASP Sentinel{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Top Report Header -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div class="space-y-2">
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('index') }}" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </a>
+                <span class="text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider font-semibold 
+                    {% if scan.source_type == 'sample' %}bg-indigo-500/20 text-indigo-300 border border-indigo-500/30
+                    {% elif scan.source_type == 'git' %}bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
+                    {% elif scan.source_type == 'upload' %}bg-purple-500/20 text-purple-300 border border-purple-500/30
+                    {% else %}bg-slate-700/50 text-slate-300 border border-slate-600{% endif %}">
+                    {{ scan.source_type }}
+                </span>
+                <span class="text-xs text-slate-400 font-mono">{{ scan.id[:8] }}</span>
+            </div>
+            <h1 class="text-2xl lg:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-7 h-7 text-brand-400"></i>
+                {{ scan.repo_name }}
+            </h1>
+            <div class="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
+                <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-4 h-4"></i> {{ scan.created_at[:19].replace('T', ' ') }}</span>
+                <span class="flex items-center gap-1.5"><i data-lucide="clock" class="w-4 h-4"></i> {{ scan.duration_seconds }}s scan time</span>
+                <span class="flex items-center gap-1.5"><i data-lucide="files" class="w-4 h-4"></i> {{ scan.scanned_files }} files inspected</span>
+                <span class="flex items-center gap-1.5"><i data-lucide="code" class="w-4 h-4"></i> {{ scan.lines_of_code }} lines of code</span>
+            </div>
+            {% if scan.source_url or scan.branch or scan.subfolder %}
+            <div class="flex flex-wrap items-center gap-2 text-xs pt-1.5 border-t border-slate-800/60 mt-1">
+                {% if scan.source_type == 'git' and scan.source_url %}
+                <span class="flex items-center gap-1.5 text-slate-300">
+                    <i data-lucide="git-branch" class="w-3.5 h-3.5 text-cyan-400"></i>
+                    <span class="font-mono text-cyan-300">{{ scan.source_url }}</span>
+                </span>
+                {% endif %}
+                {% if scan.branch %}
+                <span class="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[11px] border border-slate-700 flex items-center gap-1">
+                    <i data-lucide="git-commit" class="w-3 h-3"></i>
+                    branch: {{ scan.branch }}
+                </span>
+                {% endif %}
+                {% if scan.subfolder %}
+                <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[11px] border border-slate-700 flex items-center gap-1">
+                    <i data-lucide="folder" class="w-3 h-3"></i>
+                    subfolder: {{ scan.subfolder }}
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Export & Rescan Actions Toolbar -->
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- Rescan Button -->
+            <button id="rescanBtn" onclick="triggerRescan('{{ scan.id }}')" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/25 transition flex items-center gap-1.5 cursor-pointer" title="Re-run security scan with same parameters">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="rescanIcon"></i>
+                <span id="rescanText">Rescan</span>
+            </button>
+
+            <!-- SARIF & Patch -->
+            <a href="{{ url_for('export_sarif', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="OASIS SARIF v2.1.0 for GitHub / GitLab">
+                <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>SARIF</span>
+            </a>
+            <a href="{{ url_for('export_cyclonedx', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="CycloneDX v1.5 JSON SBOM">
+                <i data-lucide="package-check" class="w-3.5 h-3.5 text-purple-400"></i>
+                <span>CycloneDX</span>
+            </a>
+            <a href="{{ url_for('export_spdx', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="SPDX v2.3 JSON SBOM">
+                <i data-lucide="file-check" class="w-3.5 h-3.5 text-teal-400"></i>
+                <span>SPDX</span>
+            </a>
+            <a href="{{ url_for('export_patch', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="Download unified git patch file">
+                <i data-lucide="git-commit" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span>Patch</span>
+            </a>
+            <a href="{{ url_for('printable_report', scan_id=scan.id) }}" target="_blank" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="printer" class="w-3.5 h-3.5 text-brand-400"></i>
+                <span>Report</span>
+            </a>
+            <a href="{{ url_for('export_json', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-500/20 transition flex items-center gap-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>JSON</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Policy-as-Code Quality Gate Banner -->
+    <div class="border rounded-2xl p-5 shadow-xl transition
+        {% if gate_result.status == 'PASSED' %}bg-emerald-950/20 border-emerald-500/40 text-emerald-200
+        {% elif gate_result.status == 'WARNING' %}bg-yellow-950/20 border-yellow-500/40 text-yellow-200
+        {% else %}bg-red-950/20 border-red-500/40 text-red-200{% endif %}">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-start md:items-center gap-3.5">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center
+                    {% if gate_result.status == 'PASSED' %}bg-emerald-500/20 text-emerald-400
+                    {% elif gate_result.status == 'WARNING' %}bg-yellow-500/20 text-yellow-400
+                    {% else %}bg-red-500/20 text-red-400{% endif %}">
+                    {% if gate_result.status == 'PASSED' %}
+                        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                    {% elif gate_result.status == 'WARNING' %}
+                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                    {% else %}
+                        <i data-lucide="x-circle" class="w-6 h-6"></i>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded border
+                            {% if gate_result.status == 'PASSED' %}bg-emerald-500/20 border-emerald-500/40 text-emerald-400
+                            {% elif gate_result.status == 'WARNING' %}bg-yellow-500/20 border-yellow-500/40 text-yellow-400
+                            {% else %}bg-red-500/20 border-red-500/40 text-red-400{% endif %}">
+                            Quality Gate: {{ gate_result.status }}
+                        </span>
+                        <span class="text-xs text-slate-400 font-medium">Policy: {{ gate_result.policy_name }}</span>
+                    </div>
+                    <p class="text-xs text-slate-300 mt-1">{{ gate_result.summary }}</p>
+                </div>
+            </div>
+
+            <!-- Gate Preset Switcher -->
+            <div class="flex items-center gap-2 self-start md:self-auto">
+                <label for="gate-selector" class="text-xs text-slate-400">Gate Policy:</label>
+                <select id="gate-selector" onchange="window.location.search = '?gate=' + this.value"
+                        class="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-lg px-2.5 py-1 focus:outline-none focus:border-brand-500">
+                    <option value="standard" {% if active_gate == 'standard' %}selected{% endif %}>Standard (Default)</option>
+                    <option value="strict" {% if active_gate == 'strict' %}selected{% endif %}>Enterprise Strict</option>
+                    <option value="permissive" {% if active_gate == 'permissive' %}selected{% endif %}>Permissive</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Violation Details (if any) -->
+        {% if gate_result.violations %}
+        <div class="mt-3 pt-3 border-t border-slate-800/80 space-y-1.5 text-xs">
+            <span class="font-bold text-red-400 uppercase tracking-wider text-[10px]">Blocking Violations:</span>
+            <ul class="list-disc list-inside space-y-0.5 text-slate-300">
+                {% for v in gate_result.violations %}
+                <li><strong class="text-white">{{ v.rule }}:</strong> {{ v.message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Security Posture Grade & Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Grade & Score Card -->
+        <div class="lg:col-span-4 bg-dark-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between shadow-xl">
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    Security Posture
+                    <i data-lucide="award" class="w-4 h-4 text-brand-400"></i>
+                </h3>
+                <div class="mt-6 flex items-center justify-center">
+                    <div class="relative w-40 h-40 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path class="text-slate-800" stroke-width="3.5" stroke="currentColor" fill="none"
+                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path class="{% if scan.score >= 80 %}text-emerald-500{% elif scan.score >= 60 %}text-yellow-500{% elif scan.score >= 40 %}text-orange-500{% else %}text-red-500{% endif %}"
+                                  stroke-dasharray="{{ scan.score }}, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none"
+                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <div class="absolute flex flex-col items-center justify-center text-center">
+                            <span class="text-4xl font-extrabold tracking-tight text-white">{{ scan.grade }}</span>
+                            <span class="text-xs text-slate-400 font-mono mt-0.5">{{ scan.score }} / 100</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Severity Counters Grid -->
+            <div class="grid grid-cols-4 gap-2 pt-6 border-t border-slate-800 text-center">
+                <div class="p-2 rounded-xl bg-red-500/10 border border-red-500/20">
+                    <p class="text-[10px] uppercase font-bold text-red-400 tracking-wider">Critical</p>
+                    <p class="text-lg font-bold text-white mt-0.5" id="stat-critical">{{ scan.counts_by_severity.get('CRITICAL', 0) }}</p>
+                </div>
+                <div class="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
+                    <p class="text-[10px] uppercase font-bold text-orange-400 tracking-wider">High</p>
+                    <p class="text-lg font-bold text-white mt-0.5" id="stat-high">{{ scan.counts_by_severity.get('HIGH', 0) }}</p>
+                </div>
+                <div class="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                    <p class="text-[10px] uppercase font-bold text-yellow-400 tracking-wider">Medium</p>
+                    <p class="text-lg font-bold text-white mt-0.5" id="stat-medium">{{ scan.counts_by_severity.get('MEDIUM', 0) }}</p>
+                </div>
+                <div class="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <p class="text-[10px] uppercase font-bold text-blue-400 tracking-wider">Low</p>
+                    <p class="text-lg font-bold text-white mt-0.5" id="stat-low">{{ scan.counts_by_severity.get('LOW', 0) }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart 1: OWASP Category Breakdown -->
+        <div class="lg:col-span-5 bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between mb-4">
+                OWASP Top 10 Distribution
+                <i data-lucide="bar-chart-3" class="w-4 h-4 text-brand-400"></i>
+            </h3>
+            <div class="h-64 relative">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2: Severity Distribution -->
+        <div class="lg:col-span-3 bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between mb-4">
+                Severity Ratio
+                <i data-lucide="pie-chart" class="w-4 h-4 text-brand-400"></i>
+            </h3>
+            <div class="h-64 relative flex items-center justify-center">
+                <canvas id="severityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-Standard Security Frameworks Coverage Banner -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b border-slate-800/80 pb-3">
+            <div class="flex items-center gap-2">
+                <i data-lucide="layers" class="w-5 h-5 text-brand-400"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-white">Multi-Standard Security Coverage</h3>
+            </div>
+            <span class="text-xs text-slate-400">Continuous audit across 5 security domains beyond OWASP Top 10</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <!-- 1. OWASP Top 10 -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-brand-400">OWASP Top 10</span>
+                    <i data-lucide="shield-alert" class="w-4 h-4 text-brand-400"></i>
+                </div>
+                <p class="text-xs text-slate-300 mt-2">Web Application Security</p>
+                <div class="mt-2 text-[10px] text-slate-400 font-mono">A01 - A10 Audited</div>
+            </div>
+            <!-- 2. CWE Top 25 -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-fuchsia-400">CWE Top 25</span>
+                    <i data-lucide="bug" class="w-4 h-4 text-fuchsia-400"></i>
+                </div>
+                <p class="text-xs text-slate-300 mt-2">System &amp; Logic Flaws</p>
+                <div class="mt-2 text-[10px] text-fuchsia-300 font-mono">MITRE Most Dangerous</div>
+            </div>
+            <!-- 3. CIS Benchmarks -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-sky-400">CIS Benchmarks</span>
+                    <i data-lucide="box" class="w-4 h-4 text-sky-400"></i>
+                </div>
+                <p class="text-xs text-slate-300 mt-2">Docker, K8s &amp; Cloud IaC</p>
+                <div class="mt-2 text-[10px] text-sky-300 font-mono">Container Hardening</div>
+            </div>
+            <!-- 4. OpenSSF / SLSA -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-violet-400">OpenSSF / SLSA</span>
+                    <i data-lucide="git-merge" class="w-4 h-4 text-violet-400"></i>
+                </div>
+                <p class="text-xs text-slate-300 mt-2">CI/CD &amp; Supply Chain</p>
+                <div class="mt-2 text-[10px] text-violet-300 font-mono">Pipeline Hermeticity</div>
+            </div>
+            <!-- 5. FOSS Governance -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-amber-400">FOSS Governance</span>
+                    <i data-lucide="scale" class="w-4 h-4 text-amber-400"></i>
+                </div>
+                <p class="text-xs text-slate-300 mt-2">Open Source Licenses</p>
+                <div class="mt-2 text-[10px] text-amber-300 font-mono">Copyleft Risk Defenses</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs Bar -->
+    <div class="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
+        <button type="button" onclick="switchTab('findings')" id="tab-btn-findings"
+                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-brand-600 text-white shadow-md shadow-brand-500/20 whitespace-nowrap">
+            <i data-lucide="list-filter" class="w-4 h-4"></i>
+            <span>Vulnerability Findings ({{ findings|length }})</span>
+        </button>
+        <button type="button" onclick="switchTab('compliance')" id="tab-btn-compliance"
+                class="tab-btn px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 bg-dark-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 whitespace-nowrap">
+            <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+            <span>Regulatory &amp; Standards Compliance</span>
+        </button>
+        <button type="button" onclick="switchTab('sbom')" id="tab-btn-sbom"
+                class="tab-btn px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 bg-dark-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 whitespace-nowrap">
+            <i data-lucide="package-search" class="w-4 h-4 text-teal-400"></i>
+            <span>Supply Chain &amp; SBOM ({{ components|length }})</span>
+        </button>
+        {% if scan.folder_counts %}
+        <button type="button" onclick="switchTab('folders')" id="tab-btn-folders"
+                class="tab-btn px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 bg-dark-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 whitespace-nowrap">
+            <i data-lucide="folder-tree" class="w-4 h-4 text-cyan-400"></i>
+            <span>Scanned Folders ({{ scan.folder_counts|length }})</span>
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- ==================== TAB 1: VULNERABILITY FINDINGS ==================== -->
+    <div id="tab-pane-findings" class="space-y-6">
+
+        <!-- Filter and Search Controls -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="list-filter" class="w-5 h-5 text-brand-400"></i>
+                        Vulnerability Findings
+                    </h3>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold" id="findings-count-badge">
+                        {{ findings|length }}
+                    </span>
+                </div>
+
+                <!-- Search Field -->
+                <div class="relative w-full md:w-80">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3 top-3"></i>
+                    <input type="text" id="finding-search" placeholder="Search by rule, title, file, CWE, framework..."
+                           class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+                </div>
+            </div>
+
+            <!-- Filter Pills Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs">
+                <!-- Severity Filter -->
+                <div class="flex flex-wrap items-center gap-1.5" id="severity-filters">
+                    <span class="text-slate-400 font-semibold mr-1">Severity:</span>
+                    <button type="button" data-sev="ALL" class="sev-filter-btn px-2.5 py-1 rounded-lg font-medium bg-brand-600 text-white transition">All</button>
+                    <button type="button" data-sev="CRITICAL" class="sev-filter-btn px-2.5 py-1 rounded-lg font-medium bg-slate-800 text-slate-400 hover:text-white transition">Critical</button>
+                    <button type="button" data-sev="HIGH" class="sev-filter-btn px-2.5 py-1 rounded-lg font-medium bg-slate-800 text-slate-400 hover:text-white transition">High</button>
+                    <button type="button" data-sev="MEDIUM" class="sev-filter-btn px-2.5 py-1 rounded-lg font-medium bg-slate-800 text-slate-400 hover:text-white transition">Medium</button>
+                    <button type="button" data-sev="LOW" class="sev-filter-btn px-2.5 py-1 rounded-lg font-medium bg-slate-800 text-slate-400 hover:text-white transition">Low</button>
+                </div>
+
+                <!-- Standard / Framework Selector -->
+                <div class="flex items-center gap-2">
+                    <label for="framework-filter" class="text-slate-400 font-semibold">Standard:</label>
+                    <select id="framework-filter" class="bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-500">
+                        <option value="ALL">All Standards</option>
+                        <option value="OWASP">OWASP Top 10</option>
+                        <option value="CWE">CWE Top 25</option>
+                        <option value="CIS">CIS Benchmarks</option>
+                        <option value="SLSA">OpenSSF / SLSA</option>
+                        <option value="FOSS">FOSS Governance</option>
+                        <option value="SYSTEM">System Safety</option>
+                    </select>
+                </div>
+
+                <!-- Category Selector -->
+                <div class="flex items-center gap-2">
+                    <label for="category-filter" class="text-slate-400 font-semibold">Category:</label>
+                    <select id="category-filter" class="bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-500">
+                        <option value="ALL">All Categories</option>
+                        {% for cat_id, meta in owasp_meta.items() %}
+                        <option value="{{ cat_id }}">{{ meta.code }} - {{ meta.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div class="flex items-center gap-2">
+                    <label for="status-filter" class="text-slate-400 font-semibold">Status:</label>
+                    <select id="status-filter" class="bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-500">
+                        <option value="ALL">All Statuses</option>
+                        <option value="OPEN">Open</option>
+                        <option value="CONFIRMED">Confirmed</option>
+                        <option value="FALSE_POSITIVE">False Positive</option>
+                        <option value="RESOLVED">Resolved</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Bulk Selection & View Density Actions Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium hover:text-white transition">
+                        <input type="checkbox" id="selectAllFindingsCb" onchange="toggleSelectAllFindings(this.checked)" class="rounded border-slate-700 bg-slate-950 text-brand-600 focus:ring-brand-500 w-3.5 h-3.5 cursor-pointer">
+                        <span>Select All Visible</span>
+                    </label>
+                    <span class="text-slate-700">|</span>
+                    <button type="button" onclick="clearAllFindingSelections()" class="hover:text-white transition">
+                        Deselect
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="toggleDensityBtn" onclick="toggleFindingsDensity()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 font-medium">
+                        <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-brand-400"></i>
+                        <span id="toggleDensityText">Collapse All Details</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Findings Ledger / Cards List -->
+        <div class="space-y-4" id="findings-list">
+            {% if findings %}
+                {% for f in findings %}
+                {% set cat_code = f.category.split(':')[0] if ':' in f.category else f.category[:3] %}
+                <div class="finding-card bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 transition hover:border-slate-700"
+                     data-severity="{{ f.severity }}"
+                     data-category="{{ cat_code }}"
+                     data-frameworks="{{ (f.frameworks or [])|join(' ')|lower }}"
+                     data-cwerank="{{ f.cwe_rank or '' }}"
+                     data-status="{{ f.status }}"
+                     data-text="{{ f.title|lower }} {{ f.rule_id|lower }} {{ f.file_path|lower }} {{ f.cwe|lower }} {{ (f.frameworks or [])|join(' ')|lower }}"
+                     id="finding-card-{{ f.id }}">
+
+                    <!-- Finding Header -->
+                    <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                        <div class="flex items-start gap-3 flex-1">
+                            <input type="checkbox" class="finding-cb rounded border-slate-700 bg-slate-950 text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer mt-1 transition" 
+                                value="{{ f.id }}" data-id="{{ f.id }}" onchange="onFindingSelectChange()" />
+
+                            <div class="space-y-1.5 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border
+                                        {% if f.severity == 'CRITICAL' %}bg-red-500/20 text-red-400 border-red-500/40
+                                        {% elif f.severity == 'HIGH' %}bg-orange-500/20 text-orange-400 border-orange-500/40
+                                        {% elif f.severity == 'MEDIUM' %}bg-yellow-500/20 text-yellow-400 border-yellow-500/40
+                                        {% elif f.severity == 'LOW' %}bg-blue-500/20 text-blue-400 border-blue-500/40
+                                        {% else %}bg-slate-500/20 text-slate-400 border-slate-500/40{% endif %}">
+                                        {{ f.severity }}
+                                    </span>
+
+                                    {% if f.cwe_rank %}
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40" title="MITRE Most Dangerous Software Weaknesses">
+                                        CWE Top 25 #{{ f.cwe_rank }}
+                                    </span>
+                                    {% endif %}
+
+                                    {% if f.frameworks %}
+                                    {% for fw in f.frameworks[:2] %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-cyan-300 border border-slate-700">
+                                        {{ fw }}
+                                    </span>
+                                    {% endfor %}
+                                    {% endif %}
+
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                                        {{ f.category }}
+                                    </span>
+                                    <span class="px-2 py-0.5 rounded-md text-xs font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                                        {{ f.cwe }}
+                                    </span>
+                                    <span class="text-xs font-mono text-slate-500">{{ f.rule_id }}</span>
+                                </div>
+
+                                <h4 class="text-base font-bold text-white tracking-tight pt-1">
+                                    {{ f.title }}
+                                </h4>
+
+                                <div class="flex items-center gap-2 text-xs text-brand-400 font-mono">
+                                    <i data-lucide="file-code-2" class="w-4 h-4 text-slate-400"></i>
+                                    <span>{{ f.file_path }}:{{ f.line_number }}</span>
+                                    <button type="button" onclick="copyFindingPath('{{ f.file_path }}:{{ f.line_number }}')" class="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition" title="Copy file path & line">
+                                        <i data-lucide="copy" class="w-3 h-3"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Triage Status Dropdown -->
+                        <div class="flex items-center gap-2 self-start ml-7 md:ml-0">
+                            <span class="text-xs text-slate-400">Status:</span>
+                            <select onchange="updateFindingStatus('{{ f.id }}', this.value)"
+                                    id="status-select-{{ f.id }}"
+                                    class="status-select bg-slate-950 border border-slate-700 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 transition
+                                    {% if f.status == 'OPEN' %}text-red-400
+                                    {% elif f.status == 'CONFIRMED' %}text-orange-400
+                                    {% elif f.status == 'FALSE_POSITIVE' %}text-slate-400
+                                    {% elif f.status == 'RESOLVED' %}text-emerald-400{% endif %}">
+                                <option value="OPEN" {% if f.status == 'OPEN' %}selected{% endif %}>Open</option>
+                                <option value="CONFIRMED" {% if f.status == 'CONFIRMED' %}selected{% endif %}>Confirmed</option>
+                                <option value="FALSE_POSITIVE" {% if f.status == 'FALSE_POSITIVE' %}selected{% endif %}>False Positive</option>
+                                <option value="RESOLVED" {% if f.status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Details Container -->
+                    <div class="finding-card-body space-y-4">
+
+                    <!-- Description -->
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        {{ f.description }}
+                    </p>
+
+                    <!-- Code Viewer Context Box -->
+                    {% if f.code_snippet %}
+                    <div class="space-y-1.5">
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="code" class="w-3.5 h-3.5"></i>
+                            Code Context
+                        </p>
+                        <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-x-auto text-xs font-mono p-4 text-slate-300 leading-relaxed">
+                            <pre><code>{{ f.code_snippet }}</code></pre>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Remediation Unified Diff & 1-Click Fix Button -->
+                    {% if diff_map and diff_map.get(f.id) %}
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <p class="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <i data-lucide="git-commit" class="w-3.5 h-3.5"></i>
+                                Suggested Security Patch (Unified Diff)
+                            </p>
+                            <button type="button" onclick="applyFindingFix('{{ f.id }}')"
+                                    class="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    id="apply-fix-btn-{{ f.id }}">
+                                <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                                <span>Apply 1-Click Fix</span>
+                            </button>
+                        </div>
+                        <div class="bg-slate-950 border border-emerald-500/30 rounded-xl overflow-x-auto text-xs font-mono p-4 text-emerald-300 leading-relaxed">
+                            <pre><code>{{ diff_map[f.id] }}</code></pre>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Remediation Guide -->
+                    <div class="bg-slate-950/70 border border-brand-500/20 rounded-xl p-4 space-y-2">
+                        <p class="text-xs font-semibold text-brand-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+                            Actionable Remediation Guidance
+                        </p>
+                        <div class="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{{ f.remediation }}</div>
+                    </div>
+                    </div>
+
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="bg-dark-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 shadow-xl">
+                    <i data-lucide="shield-check" class="w-12 h-12 text-emerald-400 mx-auto mb-3"></i>
+                    <h4 class="text-lg font-bold text-white">No Vulnerabilities Detected</h4>
+                    <p class="text-sm text-slate-400 mt-1">This repository adheres to the tested OWASP Top 10 security rules.</p>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- ==================== TAB 2: COMPLIANCE MATRIX ==================== -->
+    <div id="tab-pane-compliance" class="hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% for fw_key, fw in compliance_data.items() %}
+            <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-brand-400">
+                                <i data-lucide="{{ fw.icon }}" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-bold text-white">{{ fw.name }}</h3>
+                                <p class="text-xs text-slate-400">{{ fw.description }}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border
+                            {% if fw.overall_status == 'PASS' %}bg-emerald-500/20 text-emerald-400 border-emerald-500/30
+                            {% elif fw.overall_status == 'WARNING' %}bg-yellow-500/20 text-yellow-400 border-yellow-500/30
+                            {% else %}bg-red-500/20 text-red-400 border-red-500/30{% endif %}">
+                            {{ fw.overall_status }}
+                        </span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="mt-4 space-y-1.5">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400">Readiness Score</span>
+                            <span class="font-bold text-white font-mono">{{ fw.score_percentage }}%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div class="h-2 rounded-full {% if fw.score_percentage >= 85 %}bg-emerald-500{% elif fw.score_percentage >= 60 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                 style="width: {{ fw.score_percentage }}%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                            <span>{{ fw.passed_controls }} / {{ fw.total_controls }} Controls Passed</span>
+                            {% if fw.failed_controls > 0 %}
+                            <span class="text-red-400 font-semibold">{{ fw.failed_controls }} Non-Compliant</span>
+                            {% else %}
+                            <span class="text-emerald-400 font-semibold">100% Compliant</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Breakdown List -->
+                <div class="border-t border-slate-800 pt-3 space-y-2">
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Control Audits:</p>
+                    <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {% for c_id, ctrl in fw.controls.items() %}
+                        <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 flex items-start justify-between gap-2 text-xs">
+                            <div>
+                                <span class="font-mono text-brand-400 font-semibold">{{ ctrl.id }}</span>
+                                <span class="text-slate-300 ml-1 font-medium">{{ ctrl.title }}</span>
+                                {% if ctrl.violations_count > 0 %}
+                                <p class="text-[11px] text-red-400 mt-0.5">Found {{ ctrl.violations_count }} violating finding(s)</p>
+                                {% endif %}
+                            </div>
+                            <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase shrink-0
+                                {% if ctrl.status == 'COMPLIANT' %}bg-emerald-500/20 text-emerald-400 border border-emerald-500/30
+                                {% else %}bg-red-500/20 text-red-400 border border-red-500/30{% endif %}">
+                                {{ ctrl.status }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ==================== TAB 3: SOFTWARE SUPPLY CHAIN & SBOM ==================== -->
+    <div id="tab-pane-sbom" class="hidden space-y-6">
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="package-search" class="w-5 h-5 text-teal-400"></i>
+                        Software Bill of Materials (SBOM) & Inventory
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">
+                        Catalog of all discovered software dependencies across Python requirements and Node.js packages with associated CVEs.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('export_cyclonedx', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Download CycloneDX 1.5</span>
+                    </a>
+                    <a href="{{ url_for('export_spdx', scan_id=scan.id) }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Download SPDX 2.3</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Dependencies Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                        <tr>
+                            <th class="py-3 px-4">Component Name</th>
+                            <th class="py-3 px-4">Ecosystem</th>
+                            <th class="py-3 px-4">Installed Version</th>
+                            <th class="py-3 px-4">Package URL (PURL)</th>
+                            <th class="py-3 px-4">Manifest</th>
+                            <th class="py-3 px-4">Vulnerability Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/80">
+                        {% if components %}
+                            {% for c in components %}
+                            <tr class="hover:bg-slate-850/50 transition">
+                                <td class="py-3 px-4 font-bold text-white">{{ c.name }}</td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider
+                                        {% if c.ecosystem == 'pypi' %}bg-blue-500/20 text-blue-400 border border-blue-500/30
+                                        {% else %}bg-green-500/20 text-green-400 border border-green-500/30{% endif %}">
+                                        {{ c.ecosystem }}
+                                    </span>
+                                </td>
+                                <td class="py-3 px-4 font-mono {% if c.version == 'unpinned' %}text-yellow-400{% else %}text-slate-200{% endif %}">
+                                    {{ c.version }}
+                                </td>
+                                <td class="py-3 px-4 font-mono text-slate-400 truncate max-w-xs">{{ c.purl }}</td>
+                                <td class="py-3 px-4 font-mono text-slate-400">{{ c.manifest_file }}:{{ c.manifest_line }}</td>
+                                <td class="py-3 px-4">
+                                    {% if c.vulnerabilities %}
+                                        <div class="space-y-1">
+                                            {% for v in c.vulnerabilities %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                                <i data-lucide="alert-circle" class="w-3 h-3"></i>
+                                                {{ v.cve }} [{{ v.severity }}]
+                                            </span>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                            <i data-lucide="check" class="w-3 h-3"></i> Secure
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="py-8 text-center text-slate-500">
+                                    No dependencies discovered in requirements.txt or package.json.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TAB 4: SCANNED FOLDERS ==================== -->
+    {% if scan.folder_counts %}
+    <div id="tab-pane-folders" class="hidden space-y-6">
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="folder-tree" class="w-5 h-5 text-cyan-400"></i>
+                        Scanned Directory &amp; Subfolder Tree
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">
+                        OWASP Sentinel recursively inspects every folder and subfolder across the repository.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 border border-slate-700">
+                        {{ scan.folder_counts|length }} Folders Discovered
+                    </span>
+                    <span class="px-3 py-1 rounded-xl bg-slate-800 text-xs font-semibold text-cyan-400 border border-slate-700">
+                        {{ scan.scanned_files }} Total Files
+                    </span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
+                            <th class="py-3 px-4">Relative Subfolder Path</th>
+                            <th class="py-3 px-4">Scannable Files</th>
+                            <th class="py-3 px-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 font-mono">
+                        {% for folder, count in scan.folder_counts.items() %}
+                        <tr class="hover:bg-slate-850/50 transition">
+                            <td class="py-3 px-4 flex items-center gap-2 text-white">
+                                <i data-lucide="folder" class="w-4 h-4 text-cyan-400 flex-shrink-0"></i>
+                                <span>{{ folder if folder != '.' else './ (repository root)' }}</span>
+                            </td>
+                            <td class="py-3 px-4 text-slate-300">
+                                {{ count }} scannable file{% if count != 1 %}s{% endif %}
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-sans font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    Inspected
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <!-- Floating Bulk Findings Triage Toolbar -->
+    <div id="bulkFindingsToolbar" class="fixed bottom-6 inset-x-0 mx-auto max-w-2xl z-40 px-4 transition-all duration-300 transform translate-y-24 opacity-0 pointer-events-none">
+        <div class="bg-dark-900/95 backdrop-blur-md border border-brand-500/40 rounded-2xl p-3 sm:p-4 shadow-2xl shadow-brand-500/15 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div class="flex items-center gap-2.5">
+                <span class="w-7 h-7 rounded-lg bg-brand-600 text-white font-bold text-xs flex items-center justify-center" id="bulkFindingsBadge">
+                    0
+                </span>
+                <span class="text-white font-bold text-xs sm:text-sm">
+                    <span id="bulkFindingsCount">0</span> Selected
+                </span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" onclick="executeBulkFindingStatus('RESOLVED')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 transition flex items-center gap-1.5 shadow-sm active:scale-95">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+                    <span>Mark Resolved</span>
+                </button>
+                <button type="button" onclick="executeBulkFindingStatus('FALSE_POSITIVE')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5 shadow-sm active:scale-95">
+                    <i data-lucide="flag" class="w-3.5 h-3.5"></i>
+                    <span>False Positive</span>
+                </button>
+                <button type="button" onclick="executeBulkFindingStatus('CONFIRMED')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-orange-600/30 hover:bg-orange-600/50 text-orange-300 border border-orange-500/40 transition flex items-center gap-1.5 shadow-sm active:scale-95">
+                    <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+                    <span>Confirmed</span>
+                </button>
+                <button type="button" onclick="executeBulkFindingStatus('OPEN')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/40 transition flex items-center gap-1.5 shadow-sm active:scale-95">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    <span>Open</span>
+                </button>
+                <button type="button" onclick="clearAllFindingSelections()" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition" title="Clear selection">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab Switching Logic
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-brand-600', 'text-white', 'shadow-md', 'shadow-brand-500/20');
+            btn.classList.add('bg-dark-900', 'text-slate-400', 'border', 'border-slate-800');
+        });
+
+        const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+        if (activeBtn) {
+            activeBtn.classList.add('bg-brand-600', 'text-white', 'shadow-md', 'shadow-brand-500/20');
+            activeBtn.classList.remove('bg-dark-900', 'text-slate-400', 'border-slate-800');
+        }
+
+        document.querySelectorAll('[id^="tab-pane-"]').forEach(p => p.classList.add('hidden'));
+
+        const activePane = document.getElementById(`tab-pane-${tabId}`);
+        if (activePane) {
+            activePane.classList.remove('hidden');
+        }
+    }
+
+    // Initialize Chart.js data
+    const categoryData = {{ scan.counts_by_category | tojson }};
+    const severityData = {{ scan.counts_by_severity | tojson }};
+
+    // Category Bar Chart
+    const catCtx = document.getElementById('categoryChart').getContext('2d');
+    const catLabels = Object.keys(categoryData);
+    const catValues = Object.values(categoryData);
+
+    new Chart(catCtx, {
+        type: 'bar',
+        data: {
+            labels: catLabels,
+            datasets: [{
+                label: 'Vulnerabilities',
+                data: catValues,
+                backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                borderColor: 'rgba(139, 92, 246, 1)',
+                borderWidth: 1.5,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0, color: '#94a3b8' },
+                    grid: { color: 'rgba(51, 65, 85, 0.3)' }
+                },
+                x: {
+                    ticks: { color: '#94a3b8' },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    // Severity Doughnut Chart
+    const sevCtx = document.getElementById('severityChart').getContext('2d');
+    new Chart(sevCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+                data: [
+                    severityData.CRITICAL || 0,
+                    severityData.HIGH || 0,
+                    severityData.MEDIUM || 0,
+                    severityData.LOW || 0
+                ],
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#94a3b8', font: { size: 10 } }
+                }
+            }
+        }
+    });
+
+    // Client-side filtering logic
+    let activeSeverity = 'ALL';
+    let activeFramework = 'ALL';
+    let activeCategory = 'ALL';
+    let activeStatus = 'ALL';
+    let searchQuery = '';
+
+    function filterFindings() {
+        const cards = document.querySelectorAll('.finding-card');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const sev = card.getAttribute('data-severity');
+            const cat = card.getAttribute('data-category');
+            const fw = card.getAttribute('data-frameworks') || '';
+            const cweRank = card.getAttribute('data-cwerank') || '';
+            const status = card.getAttribute('data-status');
+            const text = card.getAttribute('data-text');
+
+            const matchSev = (activeSeverity === 'ALL' || sev === activeSeverity);
+            const matchCat = (activeCategory === 'ALL' || cat === activeCategory);
+            const matchStatus = (activeStatus === 'ALL' || status === activeStatus);
+            const matchText = (searchQuery === '' || text.includes(searchQuery));
+
+            let matchFw = true;
+            if (activeFramework === 'OWASP') matchFw = fw.includes('owasp') || cat.startsWith('A');
+            else if (activeFramework === 'CWE') matchFw = fw.includes('cwe') || cweRank !== '';
+            else if (activeFramework === 'CIS') matchFw = fw.includes('cis');
+            else if (activeFramework === 'SLSA') matchFw = fw.includes('slsa') || fw.includes('supply chain');
+            else if (activeFramework === 'FOSS') matchFw = fw.includes('foss') || fw.includes('license');
+            else if (activeFramework === 'SYSTEM') matchFw = fw.includes('system safety') || cat === 'System-Safety';
+
+            if (matchSev && matchCat && matchFw && matchStatus && matchText) {
+                card.style.display = 'block';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        document.getElementById('findings-count-badge').textContent = visibleCount;
+    }
+
+    // Framework dropdown
+    const fwDropdown = document.getElementById('framework-filter');
+    if (fwDropdown) {
+        fwDropdown.addEventListener('change', (e) => {
+            activeFramework = e.target.value;
+            filterFindings();
+        });
+    }
+
+    // Severity filter buttons
+    document.querySelectorAll('.sev-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.sev-filter-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'text-white');
+                b.classList.add('bg-slate-800', 'text-slate-400');
+            });
+            btn.classList.remove('bg-slate-800', 'text-slate-400');
+            btn.classList.add('bg-brand-600', 'text-white');
+            activeSeverity = btn.getAttribute('data-sev');
+            filterFindings();
+        });
+    });
+
+    // Category dropdown
+    document.getElementById('category-filter').addEventListener('change', (e) => {
+        activeCategory = e.target.value;
+        filterFindings();
+    });
+
+    // Status dropdown
+    document.getElementById('status-filter').addEventListener('change', (e) => {
+        activeStatus = e.target.value;
+        filterFindings();
+    });
+
+    // Search query
+    document.getElementById('finding-search').addEventListener('input', (e) => {
+        searchQuery = e.target.value.toLowerCase().trim();
+        filterFindings();
+    });
+
+    // Update finding status via AJAX
+    function updateFindingStatus(findingId, newStatus) {
+        fetch(`/api/finding/${findingId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const card = document.getElementById(`finding-card-${findingId}`);
+                if (card) {
+                    card.setAttribute('data-status', newStatus);
+                    const sel = document.getElementById(`status-select-${findingId}`);
+                    if (sel) {
+                        sel.value = newStatus;
+                        sel.className = `status-select bg-slate-950 border border-slate-700 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 transition ${
+                            newStatus === 'OPEN' ? 'text-red-400' :
+                            newStatus === 'CONFIRMED' ? 'text-orange-400' :
+                            newStatus === 'FALSE_POSITIVE' ? 'text-slate-400' : 'text-emerald-400'
+                        }`;
+                    }
+                    filterFindings();
+                    if (window.showGlobalToast) window.showGlobalToast(`Updated status to ${newStatus}`, 'success');
+                }
+            } else {
+                alert('Failed to update status: ' + data.error);
+            }
+        })
+        .catch(err => alert('Network error updating status'));
+    }
+
+    // Bulk Findings Triage State & Handlers
+    const selectedFindingIds = new Set();
+    let isDetailsCollapsed = false;
+
+    function onFindingSelectChange() {
+        selectedFindingIds.clear();
+        document.querySelectorAll('.finding-cb:checked').forEach(cb => {
+            selectedFindingIds.add(cb.getAttribute('data-id'));
+        });
+        updateBulkFindingsUI();
+    }
+
+    function updateBulkFindingsUI() {
+        const count = selectedFindingIds.size;
+        const toolbar = document.getElementById('bulkFindingsToolbar');
+        const badge = document.getElementById('bulkFindingsBadge');
+        const countEl = document.getElementById('bulkFindingsCount');
+        const selectAllCb = document.getElementById('selectAllFindingsCb');
+
+        if (badge) badge.textContent = count;
+        if (countEl) countEl.textContent = count;
+
+        if (toolbar) {
+            if (count > 0) {
+                toolbar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+                toolbar.classList.add('translate-y-0', 'opacity-100');
+            } else {
+                toolbar.classList.remove('translate-y-0', 'opacity-100');
+                toolbar.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+            }
+        }
+
+        if (selectAllCb) {
+            const visibleCheckboxes = Array.from(document.querySelectorAll('.finding-card'))
+                .filter(card => card.style.display !== 'none')
+                .map(card => card.querySelector('.finding-cb'))
+                .filter(Boolean);
+            const checkedVisible = visibleCheckboxes.filter(cb => cb.checked).length;
+            selectAllCb.checked = visibleCheckboxes.length > 0 && checkedVisible === visibleCheckboxes.length;
+            selectAllCb.indeterminate = checkedVisible > 0 && checkedVisible < visibleCheckboxes.length;
+        }
+
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function toggleSelectAllFindings(checkAll) {
+        const visibleCards = Array.from(document.querySelectorAll('.finding-card'))
+            .filter(card => card.style.display !== 'none');
+
+        visibleCards.forEach(card => {
+            const cb = card.querySelector('.finding-cb');
+            if (cb) {
+                cb.checked = checkAll;
+                const id = cb.getAttribute('data-id');
+                if (checkAll) selectedFindingIds.add(id);
+                else selectedFindingIds.delete(id);
+            }
+        });
+        updateBulkFindingsUI();
+    }
+
+    function clearAllFindingSelections() {
+        selectedFindingIds.clear();
+        document.querySelectorAll('.finding-cb').forEach(cb => cb.checked = false);
+        updateBulkFindingsUI();
+    }
+
+    async function executeBulkFindingStatus(newStatus) {
+        const ids = Array.from(selectedFindingIds);
+        if (ids.length === 0) return;
+
+        try {
+            const resp = await fetch('/api/findings/bulk-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ finding_ids: ids, status: newStatus })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                ids.forEach(fid => {
+                    const card = document.getElementById(`finding-card-${fid}`);
+                    if (card) {
+                        card.setAttribute('data-status', newStatus);
+                        const sel = document.getElementById(`status-select-${fid}`);
+                        if (sel) {
+                            sel.value = newStatus;
+                            sel.className = `status-select bg-slate-950 border border-slate-700 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 transition ${
+                                newStatus === 'OPEN' ? 'text-red-400' :
+                                newStatus === 'CONFIRMED' ? 'text-orange-400' :
+                                newStatus === 'FALSE_POSITIVE' ? 'text-slate-400' : 'text-emerald-400'
+                            }`;
+                        }
+                    }
+                });
+                clearAllFindingSelections();
+                filterFindings();
+                if (window.showGlobalToast) window.showGlobalToast(`Updated ${data.updated_count} finding(s) to ${newStatus}`, 'success');
+            } else {
+                alert('Failed to update status: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Network error updating findings status: ' + err.message);
+        }
+    }
+
+    function toggleFindingsDensity() {
+        isDetailsCollapsed = !isDetailsCollapsed;
+        const bodies = document.querySelectorAll('.finding-card-body');
+        const textEl = document.getElementById('toggleDensityText');
+        bodies.forEach(b => {
+            b.style.display = isDetailsCollapsed ? 'none' : 'block';
+        });
+        if (textEl) {
+            textEl.textContent = isDetailsCollapsed ? 'Expand All Details' : 'Collapse All Details';
+        }
+    }
+
+    function copyFindingPath(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (window.showGlobalToast) window.showGlobalToast(`Copied location: ${text}`, 'info');
+        });
+    }
+
+    // Apply 1-Click Fix via AJAX
+    async function applyFindingFix(findingId) {
+        const btn = document.getElementById(`apply-fix-btn-${findingId}`);
+        if (!btn) return;
+
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Applying...`;
+        lucide.createIcons();
+
+        try {
+            const resp = await fetch(`/api/scan/{{ scan.id }}/apply-fix/${findingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                btn.className = "px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-800 text-emerald-200 transition flex items-center gap-1.5";
+                btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i> Fix Applied`;
+
+                // Update select dropdown
+                const select = document.getElementById(`status-select-${findingId}`);
+                if (select) {
+                    select.value = 'RESOLVED';
+                    select.className = "status-select bg-slate-950 border border-slate-700 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 transition text-emerald-400";
+                }
+
+                // Update card attribute
+                const card = document.getElementById(`finding-card-${findingId}`);
+                if (card) {
+                    card.setAttribute('data-status', 'RESOLVED');
+                }
+            } else {
+                alert('Failed to apply fix: ' + (data.error || 'Unknown error'));
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="wand-2" class="w-3.5 h-3.5"></i> Apply 1-Click Fix`;
+            }
+        } catch (err) {
+            alert('Network error while applying fix.');
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="wand-2" class="w-3.5 h-3.5"></i> Apply 1-Click Fix`;
+        }
+        lucide.createIcons();
+    }
+
+    // Trigger Re-scan via API
+    async function triggerRescan(scanId) {
+        const btn = document.getElementById('rescanBtn');
+        const text = document.getElementById('rescanText');
+        const icon = document.getElementById('rescanIcon');
+
+        if (btn) btn.disabled = true;
+        if (text) text.textContent = 'Rescanning...';
+        if (icon) {
+            icon.setAttribute('data-lucide', 'loader-2');
+            icon.classList.add('animate-spin');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        try {
+            const resp = await fetch(`/api/scan/${scanId}/rescan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await resp.json();
+            if (data.success && data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                alert('Rescan failed: ' + (data.error || 'Unknown error occurred.'));
+                if (btn) btn.disabled = false;
+                if (text) text.textContent = 'Rescan';
+                if (icon) {
+                    icon.setAttribute('data-lucide', 'refresh-cw');
+                    icon.classList.remove('animate-spin');
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        } catch (err) {
+            alert('Network error while requesting rescan: ' + err.message);
+            if (btn) btn.disabled = false;
+            if (text) text.textContent = 'Rescan';
+            if (icon) {
+                icon.setAttribute('data-lucide', 'refresh-cw');
+                icon.classList.remove('animate-spin');
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    }
+</script>
+{% endblock %}

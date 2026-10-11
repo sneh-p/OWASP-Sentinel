@@ -1,0 +1,18 @@
+name: Deploy Pipeline
+
+# SEC-IAC-009: Dangerous pull_request_target trigger
+on:
+  pull_request_target:
+    branches: [ main ]
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    # SLSA-CI-002: Excessive write-all permissions
+    permissions: write-all
+    steps:
+      - uses: actions/checkout@v4
+      # SEC-IAC-008: GitHub Actions expression injection in run script step
+      - name: Process PR Information
+        run: |
+          echo "Processing PR from author: ${{ github.event.pull_request.title }}"

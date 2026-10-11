@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}OWASP Top 10 Security Rules Catalog - OWASP Sentinel{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+    <!-- Header -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <i data-lucide="book-open" class="w-6 h-6 text-brand-400"></i>
+                    OWASP Top 10 Rules Catalog
+                </h1>
+                <p class="text-sm text-slate-400 mt-1">Explore all built-in static analysis detection rules, CWE mappings, descriptions, and code remediation standards.</p>
+            </div>
+            <div class="relative w-full md:w-80">
+                <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3 top-3"></i>
+                <input type="text" id="rule-search" placeholder="Search rules by ID, title, CWE..."
+                       class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+            </div>
+        </div>
+
+        <!-- Framework and Category Filter Pills -->
+        <div class="space-y-3 pt-6 mt-6 border-t border-slate-800/80">
+            <div class="flex items-center gap-2">
+                <span class="text-xs uppercase font-bold tracking-wider text-slate-400">Frameworks:</span>
+                <div class="flex flex-wrap gap-2" id="rule-framework-filters">
+                    <button type="button" data-fw="ALL" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white transition">All Standards ({{ rules|length }})</button>
+                    <button type="button" data-fw="OWASP" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white transition">OWASP Top 10</button>
+                    <button type="button" data-fw="CWE" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white transition">CWE Top 25</button>
+                    <button type="button" data-fw="CIS" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white transition">CIS Cloud &amp; Containers</button>
+                    <button type="button" data-fw="SLSA" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white transition">Supply Chain (SLSA)</button>
+                    <button type="button" data-fw="SYSTEM" class="rule-fw-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white transition">System Safety</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+                <span class="text-xs uppercase font-bold tracking-wider text-slate-400">Categories:</span>
+                <div class="flex flex-wrap gap-1.5" id="rule-category-filters">
+                    <button type="button" data-cat="ALL" class="rule-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white transition">All Categories</button>
+                    {% for cat in categories %}
+                    {% set code = cat.short_code %}
+                    <button type="button" data-cat="{{ code }}" class="rule-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition">
+                        {{ code }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Grid -->
+    <div class="grid grid-cols-1 gap-6" id="rules-list">
+        {% for rule in rules %}
+        {% set cat_code = rule.category.short_code %}
+        <div class="rule-card bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-7 shadow-xl space-y-4 hover:border-slate-700 transition"
+             data-category="{{ cat_code }}"
+             data-frameworks="{{ (rule.frameworks or [])|join(' ')|lower }} {{ rule.standard|lower }}"
+             data-text="{{ rule.id|lower }} {{ rule.title|lower }} {{ rule.cwe|lower }} {{ rule.description|lower }} {{ (rule.frameworks or [])|join(' ')|lower }}">
+
+            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div class="space-y-1.5">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Severity Badge -->
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border
+                            {% if rule.severity.value == 'CRITICAL' %}bg-red-500/20 text-red-400 border-red-500/40
+                            {% elif rule.severity.value == 'HIGH' %}bg-orange-500/20 text-orange-400 border-orange-500/40
+                            {% elif rule.severity.value == 'MEDIUM' %}bg-yellow-500/20 text-yellow-400 border-yellow-500/40
+                            {% elif rule.severity.value == 'LOW' %}bg-blue-500/20 text-blue-400 border-blue-500/40
+                            {% else %}bg-slate-500/20 text-slate-400 border-slate-500/40{% endif %}">
+                            {{ rule.severity.value }}
+                        </span>
+
+                        <!-- Standard / Framework -->
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            {{ rule.standard }}
+                        </span>
+
+                        <!-- CWE Top 25 Rank -->
+                        {% if rule.cwe_rank %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40">
+                            CWE Top 25 #{{ rule.cwe_rank }}
+                        </span>
+                        {% endif %}
+
+                        <!-- Category -->
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                            {{ rule.category.value }}
+                        </span>
+
+                        <!-- CWE -->
+                        <span class="px-2 py-0.5 rounded-md text-xs font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                            {{ rule.cwe }}
+                        </span>
+
+                        <span class="text-xs font-mono text-slate-500">{{ rule.id }}</span>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-white tracking-tight pt-1">
+                        {{ rule.title }}
+                    </h3>
+                </div>
+
+                <!-- Languages Tags -->
+                <div class="flex flex-wrap gap-1 self-start">
+                    {% for lang in rule.languages %}
+                    <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                        {{ lang }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Description -->
+            <p class="text-sm text-slate-300 leading-relaxed">
+                {{ rule.description }}
+            </p>
+
+            <!-- Remediation -->
+            <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-2">
+                <h4 class="text-xs font-semibold text-brand-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                    Remediation &amp; Mitigation Guidance
+                </h4>
+                <p class="text-xs text-slate-300 leading-relaxed">{{ rule.remediation }}</p>
+                {% if rule.remediation_code %}
+                <div class="pt-2">
+                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Secure Code Example:</p>
+                    <pre class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto"><code>{{ rule.remediation_code }}</code></pre>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let activeCat = 'ALL';
+    let activeFw = 'ALL';
+    let searchQuery = '';
+
+    function filterRules() {
+        const cards = document.querySelectorAll('.rule-card');
+        cards.forEach(card => {
+            const cat = card.getAttribute('data-category');
+            const fw = card.getAttribute('data-frameworks') || '';
+            const text = card.getAttribute('data-text');
+
+            const matchCat = (activeCat === 'ALL' || cat === activeCat);
+            let matchFw = true;
+            if (activeFw === 'OWASP') matchFw = fw.includes('owasp');
+            else if (activeFw === 'CWE') matchFw = fw.includes('cwe');
+            else if (activeFw === 'CIS') matchFw = fw.includes('cis');
+            else if (activeFw === 'SLSA') matchFw = fw.includes('slsa') || fw.includes('supply chain');
+            else if (activeFw === 'SYSTEM') matchFw = fw.includes('system safety') || cat === 'System-Safety';
+
+            const matchText = (searchQuery === '' || text.includes(searchQuery));
+
+            if (matchCat && matchFw && matchText) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    document.querySelectorAll('.rule-fw-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.rule-fw-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'text-white');
+                b.classList.add('bg-slate-800', 'text-slate-300');
+            });
+            btn.classList.remove('bg-slate-800', 'text-slate-300');
+            btn.classList.add('bg-brand-600', 'text-white');
+            activeFw = btn.getAttribute('data-fw');
+            filterRules();
+        });
+    });
+
+    document.querySelectorAll('.rule-cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.rule-cat-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'text-white');
+                b.classList.add('bg-slate-800', 'text-slate-400');
+            });
+            btn.classList.remove('bg-slate-800', 'text-slate-400');
+            btn.classList.add('bg-brand-600', 'text-white');
+            activeCat = btn.getAttribute('data-cat');
+            filterRules();
+        });
+    });
+
+    document.getElementById('rule-search').addEventListener('input', (e) => {
+        searchQuery = e.target.value.toLowerCase().trim();
+        filterRules();
+    });
+</script>
+{% endblock %}

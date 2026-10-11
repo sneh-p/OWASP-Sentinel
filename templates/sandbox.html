@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel Sandbox - Real-Time Code Security Playground{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header Section -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold tracking-wider uppercase">
+                    Interactive Playground
+                </span>
+                <span class="text-xs text-slate-400 font-mono">AST & Pattern SAST Engine</span>
+            </div>
+            <h1 class="text-2xl lg:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">
+                <i data-lucide="terminal" class="w-8 h-8 text-emerald-400"></i>
+                Sentinel Live Sandbox
+            </h1>
+            <p class="text-sm text-slate-400 mt-1 max-w-2xl">
+                Test and analyze arbitrary code snippets in real time. Instant feedback on OWASP Top 10 vulnerabilities, AST flaws, enterprise secrets, and IaC misconfigurations without uploading or repository checkout.
+            </p>
+        </div>
+
+        <!-- Preset Examples Selector -->
+        <div class="flex items-center gap-2">
+            <label for="example-presets" class="text-xs text-slate-400 font-medium">Load Vulnerable Example:</label>
+            <select id="example-presets" class="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-xl px-3 py-2 focus:outline-none focus:border-brand-500">
+                <option value="">-- Choose Preset --</option>
+                <option value="py_sql">Python: SQLi & Command Injection</option>
+                <option value="py_api">Python: API Mass Assignment & XXE</option>
+                <option value="py_temp">Python: Insecure tempfile & Jinja2 XSS</option>
+                <option value="js_proto">JavaScript: Prototype Pollution & JWT 'none'</option>
+                <option value="tf_cloud">Terraform: Public S3 & Open 0.0.0.0/0 SG</option>
+                <option value="k8s_esc">Kubernetes: Privileged Esc & Host PID</option>
+                <option value="docker_sec">Dockerfile: Root User & Leaked Creds</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Playground Workspace Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Code Input Pane -->
+        <div class="lg:col-span-6 bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="code-2" class="w-5 h-5 text-brand-400"></i>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Source Code</h3>
+                </div>
+
+                <!-- Language Selection -->
+                <div class="flex items-center gap-2">
+                    <label for="sandbox-lang" class="text-xs text-slate-400">Language / File Type:</label>
+                    <select id="sandbox-lang" class="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1 focus:outline-none focus:border-brand-500">
+                        <option value="py">Python (.py)</option>
+                        <option value="js">JavaScript (.js)</option>
+                        <option value="tf">Terraform (.tf)</option>
+                        <option value="yaml">Kubernetes / YAML (.yaml)</option>
+                        <option value="dockerfile">Dockerfile</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Code Editor Textarea -->
+            <div class="relative flex-1 min-h-[360px]">
+                <textarea id="sandbox-code" rows="18"
+                          class="w-full h-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-brand-500 transition resize-y"
+                          placeholder="Paste or write code here to scan..."></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between pt-2">
+                <button type="button" id="btn-clear" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                    Clear Editor
+                </button>
+                <button type="button" id="btn-run-scan" class="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition active:scale-95">
+                    <i data-lucide="play" class="w-4 h-4"></i>
+                    <span>Run SAST Analysis</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Scan Output / Findings Pane -->
+        <div class="lg:col-span-6 bg-dark-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-emerald-400"></i>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Analysis Results</h3>
+                </div>
+                <div id="results-meta" class="hidden flex items-center gap-2 text-xs">
+                    <span id="findings-count-badge" class="px-2.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 border border-red-500/30">0 Findings</span>
+                    <span id="scan-time-badge" class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 font-mono">0ms</span>
+                </div>
+            </div>
+
+            <!-- Findings Stream Container -->
+            <div id="findings-container" class="flex-1 overflow-y-auto max-h-[500px] space-y-3 pr-1">
+                <!-- Initial State Placeholder -->
+                <div id="placeholder-box" class="h-full flex flex-col items-center justify-center p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                    <i data-lucide="scan-line" class="w-12 h-12 text-slate-600 mb-3 animate-pulse"></i>
+                    <p class="text-sm font-semibold text-slate-400">Ready to Scan</p>
+                    <p class="text-xs text-slate-500 mt-1 max-w-xs">Select a vulnerable preset or paste code into the editor and click "Run SAST Analysis".</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const PRESETS = {
+        py_sql: {
+            lang: 'py',
+            code: `import sqlite3
+import os
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route('/search')
+def search_user():
+    username = request.args.get('user', '')
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    # SQL Injection via formatted string
+    query = f"SELECT * FROM accounts WHERE user = '{username}'"
+    cursor.execute(query)
+    
+    # Command injection via os.system
+    os.system("echo Logging query for: " + username)
+    return "Query executed"`
+        },
+        py_api: {
+            lang: 'py',
+            code: `from flask import Flask, request, jsonify
+import xml.etree.ElementTree as ET
+
+app = Flask(__name__)
+
+class User:
+    def update(self, **kwargs):
+        pass
+
+@app.route('/api/profile', methods=['PUT'])
+def update_profile():
+    user = User()
+    # Mass Assignment Vulnerability
+    user.update(**request.json)
+    return jsonify({"status": "updated"})
+
+@app.route('/api/xml', methods=['POST'])
+def parse_xml():
+    # XXE Injection Vulnerability
+    root = ET.fromstring(request.data)
+    return jsonify({"tag": root.tag})`
+        },
+        py_temp: {
+            lang: 'py',
+            code: `import tempfile
+from jinja2 import Environment
+
+# Jinja2 autoescape disabled (XSS)
+env = Environment(autoescape=False)
+
+def export_file():
+    # Insecure temporary file creation (TOCTOU race condition)
+    tmp_path = tempfile.mktemp(suffix=".csv")
+    with open(tmp_path, "w") as f:
+        f.write("id,data\\n1,test")
+    return tmp_path`
+        },
+        js_proto: {
+            lang: 'js',
+            code: `const express = require('express');
+const jwt = require('jsonwebtoken');
+const app = express();
+
+app.post('/api/settings', (req, res) => {
+    // JavaScript Prototype Pollution
+    Object.assign(req.userConfig, req.body);
+    res.json({ success: true });
+});
+
+app.post('/api/verify', (req, res) => {
+    const token = req.headers['authorization'];
+    // Insecure JWT 'none' algorithm
+    jwt.verify(token, 'secret', { algorithms: ['none'] });
+    res.json({ authorized: true });
+});`
+        },
+        tf_cloud: {
+            lang: 'tf',
+            code: `resource "aws_security_group" "open_ssh" {
+  name = "allow_all_ssh"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Open to entire Internet!
+  }
+}
+
+resource "aws_s3_bucket" "public_backup" {
+  bucket = "company-data-backups"
+  acl    = "public-read" # Public bucket exposure!
+}`
+        },
+        k8s_esc: {
+            lang: 'yaml',
+            code: `apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+spec:
+  hostPID: true
+  hostNetwork: true
+  containers:
+    - name: exploit-container
+      image: alpine:latest
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+      resources: {}`
+        },
+        docker_sec: {
+            lang: 'dockerfile',
+            code: `FROM python:latest
+
+WORKDIR /app
+# Hardcoded secret credential in environment variable
+ENV DATABASE_PASSWORD="super_secret_db_password_12345"
+
+COPY . .
+# Running container as root user
+USER root
+
+CMD ["python", "app.py"]`
+        }
+    };
+
+    const presetSelect = document.getElementById('example-presets');
+    const langSelect = document.getElementById('sandbox-lang');
+    const codeArea = document.getElementById('sandbox-code');
+    const runBtn = document.getElementById('btn-run-scan');
+    const clearBtn = document.getElementById('btn-clear');
+    const container = document.getElementById('findings-container');
+    const metaBox = document.getElementById('results-meta');
+    const countBadge = document.getElementById('findings-count-badge');
+    const timeBadge = document.getElementById('scan-time-badge');
+
+    // Preset loading
+    presetSelect.addEventListener('change', (e) => {
+        const key = e.target.value;
+        if (key && PRESETS[key]) {
+            langSelect.value = PRESETS[key].lang;
+            codeArea.value = PRESETS[key].code;
+            runScan();
+        }
+    });
+
+    clearBtn.addEventListener('click', () => {
+        codeArea.value = '';
+        metaBox.classList.add('hidden');
+        container.innerHTML = `
+            <div id="placeholder-box" class="h-full flex flex-col items-center justify-center p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                <i data-lucide="scan-line" class="w-12 h-12 text-slate-600 mb-3 animate-pulse"></i>
+                <p class="text-sm font-semibold text-slate-400">Ready to Scan</p>
+                <p class="text-xs text-slate-500 mt-1 max-w-xs">Select a vulnerable preset or paste code into the editor and click "Run SAST Analysis".</p>
+            </div>
+        `;
+        lucide.createIcons();
+    });
+
+    async function runScan() {
+        const code = codeArea.value.trim();
+        const lang = langSelect.value;
+
+        if (!code) {
+            alert('Please paste or write some code to scan.');
+            return;
+        }
+
+        runBtn.disabled = true;
+        runBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Analyzing...`;
+        lucide.createIcons();
+
+        try {
+            const resp = await fetch('/api/sandbox/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, language: lang })
+            });
+            const data = await resp.json();
+
+            metaBox.classList.remove('hidden');
+            timeBadge.textContent = `${data.duration_ms}ms`;
+
+            if (data.findings && data.findings.length > 0) {
+                countBadge.textContent = `${data.findings.length} Vulnerabilities`;
+                countBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 border border-red-500/30';
+
+                let html = '';
+                data.findings.forEach((f, idx) => {
+                    const sevClass = f.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border-red-500/40' :
+                                    f.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
+                                    f.severity === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' :
+                                    'bg-blue-500/20 text-blue-400 border-blue-500/40';
+
+                    html += `
+                        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-2.5 transition hover:border-slate-700">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${sevClass}">${f.severity}</span>
+                                    <span class="text-xs font-mono text-brand-400">${f.rule_id}</span>
+                                    <span class="text-xs font-mono text-slate-500">${f.cwe}</span>
+                                </div>
+                                <span class="text-xs font-mono text-slate-400">Line ${f.line_number}</span>
+                            </div>
+                            <h4 class="text-sm font-bold text-white">${f.title}</h4>
+                            <p class="text-xs text-slate-300 leading-relaxed">${f.description}</p>
+                            ${f.matched_line ? `<div class="bg-dark-950 border border-slate-800/80 rounded p-2 text-xs font-mono text-red-400 overflow-x-auto">${escapeHtml(f.matched_line)}</div>` : ''}
+                            ${f.diff ? `
+                                <div class="space-y-1">
+                                    <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Suggested Auto-Fix:</span>
+                                    <pre class="bg-dark-950 border border-emerald-500/30 rounded p-2 text-xs font-mono text-emerald-300 overflow-x-auto"><code>${escapeHtml(f.diff)}</code></pre>
+                                </div>
+                            ` : ''}
+                            <div class="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded border border-slate-800/60">
+                                <strong class="text-slate-300">Remediation:</strong> ${escapeHtml(f.remediation)}
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } else {
+                countBadge.textContent = '0 Vulnerabilities';
+                countBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                container.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center p-12 text-center text-slate-400 border border-emerald-500/20 bg-emerald-500/5 rounded-xl">
+                        <i data-lucide="shield-check" class="w-12 h-12 text-emerald-400 mb-3"></i>
+                        <h4 class="text-sm font-bold text-white">Clean Code - No Flaws Detected</h4>
+                        <p class="text-xs text-slate-400 mt-1 max-w-xs">No known OWASP vulnerabilities or security violations detected in this snippet.</p>
+                    </div>
+                `;
+            }
+        } catch (err) {
+            alert('Failed to execute sandbox scan: ' + err.message);
+        } finally {
+            runBtn.disabled = false;
+            runBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i><span>Run SAST Analysis</span>`;
+            lucide.createIcons();
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    runBtn.addEventListener('click', runScan);
+</script>
+{% endblock %}

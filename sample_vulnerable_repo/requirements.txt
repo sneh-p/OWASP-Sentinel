@@ -1,0 +1,5 @@
+# Vulnerable Python dependencies for testing OWASP A06
+flask==2.0.1
+requests==2.28.0
+pyyaml==5.3.1
+unpinned-library

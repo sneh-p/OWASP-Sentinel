@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnerable-k8s-workload
+  labels:
+    app: sentinel-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel-demo
+  template:
+    metadata:
+      labels:
+        app: sentinel-demo
+    spec:
+      # SEC-IAC-002: Pod sharing host namespaces
+      hostPID: true
+      hostNetwork: true
+      containers:
+        - name: app
+          image: python:3.11-slim
+          # SEC-IAC-001: Container configured with privileged capabilities
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+          # SEC-IAC-003: Missing resource limits (DoS risk)
+          resources: {}
+          ports:
+            - containerPort: 5000

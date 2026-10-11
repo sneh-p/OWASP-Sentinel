@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Comparison &amp; Regression Analysis - OWASP Sentinel{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+    <!-- Comparison Header -->
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                    Regression &amp; Diff Engine
+                </span>
+                <h1 class="text-2xl lg:text-3xl font-bold text-white tracking-tight mt-2 flex items-center gap-2">
+                    <i data-lucide="git-compare" class="w-7 h-7 text-brand-400"></i>
+                    Scan Comparison &amp; Regression Analysis
+                </h1>
+                <p class="text-sm text-slate-400 mt-1">Audit security delta between two scans (e.g. baseline branch vs feature pull request) to prevent regressions.</p>
+            </div>
+
+            <!-- Selector Form -->
+            <form method="GET" action="{{ url_for('compare_view') }}" class="flex flex-wrap items-center gap-3 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Base Scan (Before)</label>
+                    <select name="base" class="bg-dark-900 border border-slate-700 text-xs rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-brand-500">
+                        {% for s in all_scans %}
+                        <option value="{{ s.id }}" {% if comparison and comparison.base_scan_id == s.id %}selected{% endif %}>
+                            {{ s.repo_name }} ({{ s.created_at[:16].replace('T', ' ') }}) - {{ s.grade }} ({{ s.score }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Target Scan (After)</label>
+                    <select name="target" class="bg-dark-900 border border-slate-700 text-xs rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-brand-500">
+                        {% for s in all_scans %}
+                        <option value="{{ s.id }}" {% if comparison and comparison.target_scan_id == s.id %}selected{% endif %}>
+                            {{ s.repo_name }} ({{ s.created_at[:16].replace('T', ' ') }}) - {{ s.grade }} ({{ s.score }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="self-end">
+                    <button type="submit" class="px-4 py-2 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition flex items-center gap-1.5">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        <span>Compare</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if comparison %}
+    <!-- Summary Comparison Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Score Delta -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
+            <div>
+                <p class="text-xs text-slate-400 font-medium">Security Score Delta</p>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <h3 class="text-3xl font-extrabold {% if comparison.score_delta > 0 %}text-emerald-400{% elif comparison.score_delta < 0 %}text-red-400{% else %}text-slate-200{% endif %}">
+                        {% if comparison.score_delta > 0 %}+{% endif %}{{ comparison.score_delta }}
+                    </h3>
+                    <span class="text-xs text-slate-400 font-mono">({{ comparison.base_score }} &rarr; {{ comparison.target_score }})</span>
+                </div>
+                <p class="text-xs mt-1 {% if comparison.score_delta > 0 %}text-emerald-400{% elif comparison.score_delta < 0 %}text-red-400{% else %}text-slate-400{% endif %}">
+                    {% if comparison.score_delta > 0 %}Posture Improved{% elif comparison.score_delta < 0 %}Security Regression{% else %}Unchanged{% endif %}
+                </p>
+            </div>
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center {% if comparison.score_delta >= 0 %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
+                <i data-lucide="{% if comparison.score_delta >= 0 %}trending-up{% else %}trending-down{% endif %}" class="w-6 h-6"></i>
+            </div>
+        </div>
+
+        <!-- New Vulnerabilities -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
+            <div>
+                <p class="text-xs text-slate-400 font-medium">New Issues Introduced</p>
+                <h3 class="text-3xl font-extrabold text-red-400 mt-1">{{ comparison.new_count }}</h3>
+                <p class="text-xs text-slate-500 mt-1">Requires triage / blocker</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+            </div>
+        </div>
+
+        <!-- Fixed Issues -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
+            <div>
+                <p class="text-xs text-slate-400 font-medium">Fixed / Remediated</p>
+                <h3 class="text-3xl font-extrabold text-emerald-400 mt-1">{{ comparison.fixed_count }}</h3>
+                <p class="text-xs text-slate-500 mt-1">Resolved in target scan</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <i data-lucide="check-check" class="w-6 h-6"></i>
+            </div>
+        </div>
+
+        <!-- Persistent Issues -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
+            <div>
+                <p class="text-xs text-slate-400 font-medium">Persistent Issues</p>
+                <h3 class="text-3xl font-extrabold text-yellow-400 mt-1">{{ comparison.persistent_count }}</h3>
+                <p class="text-xs text-slate-500 mt-1">Present in both scans</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-400">
+                <i data-lucide="clock" class="w-6 h-6"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparison Findings Sections -->
+    <div class="space-y-6">
+
+        <!-- 1. New Vulnerabilities Introduced -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-red-400 animate-pulse"></span>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        New Vulnerabilities Introduced ({{ comparison.new_count }})
+                    </h3>
+                </div>
+                <span class="text-xs text-red-400 font-semibold bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-full">
+                    Regression Risk
+                </span>
+            </div>
+
+            {% if comparison.new_findings %}
+            <div class="space-y-3">
+                {% for f in comparison.new_findings %}
+                <div class="p-4 rounded-xl bg-red-500/5 border border-red-500/20 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold uppercase px-2 py-0.5 rounded bg-red-500/20 text-red-300">{{ f.severity }}</span>
+                            <span class="text-xs font-mono text-slate-400">{{ f.rule_id }}</span>
+                            <span class="text-xs font-mono text-slate-400">{{ f.cwe }}</span>
+                        </div>
+                        <span class="text-xs font-mono text-brand-400">{{ f.file_path }}:{{ f.line_number }}</span>
+                    </div>
+                    <h4 class="text-sm font-bold text-white">{{ f.title }}</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">{{ f.description }}</p>
+                    {% if f.code_snippet %}
+                    <pre class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs font-mono text-red-300 overflow-x-auto"><code>{{ f.code_snippet }}</code></pre>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-400">
+                <i data-lucide="shield-check" class="w-10 h-10 text-emerald-400 mx-auto mb-2"></i>
+                <p class="text-sm font-semibold text-white">No New Vulnerabilities Introduced</p>
+                <p class="text-xs text-slate-500">Target scan did not add any new security flaws compared to baseline.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 2. Fixed Vulnerabilities -->
+        <div class="bg-dark-900 border border-slate-800 rounded-2xl p-6 lg:p-8 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        Remediated / Fixed Vulnerabilities ({{ comparison.fixed_count }})
+                    </h3>
+                </div>
+                <span class="text-xs text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                    Resolved
+                </span>
+            </div>
+
+            {% if comparison.fixed_findings %}
+            <div class="space-y-3">
+                {% for f in comparison.fixed_findings %}
+                <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{{ f.severity }}</span>
+                            <span class="text-xs font-mono text-slate-400">{{ f.rule_id }}</span>
+                            <span class="text-xs font-mono text-slate-400">{{ f.cwe }}</span>
+                        </div>
+                        <span class="text-xs font-mono text-brand-400">{{ f.file_path }}:{{ f.line_number }}</span>
+                    </div>
+                    <h4 class="text-sm font-bold text-white">{{ f.title }}</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">{{ f.description }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-400">
+                <i data-lucide="info" class="w-10 h-10 text-slate-500 mx-auto mb-2"></i>
+                <p class="text-sm font-semibold text-white">No Issues Resolved</p>
+                <p class="text-xs text-slate-500">None of the baseline vulnerabilities were resolved in this scan.</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+    {% else %}
+    <div class="bg-dark-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 shadow-xl">
+        <i data-lucide="git-compare" class="w-12 h-12 text-brand-400 mx-auto mb-3"></i>
+        <h3 class="text-lg font-bold text-white">Select Two Scans to Compare</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+            Choose a baseline scan and a target scan from the dropdowns above to analyze security progression, regressions, and resolved issues.
+        </p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
